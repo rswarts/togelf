@@ -16,7 +16,7 @@ import traceback
 import zlib
 from os import stat
 from stat import ST_SIZE
-from socket import *
+from client import Client
 
 configFile = '/etc/gelfDaemon.conf'
 
@@ -24,18 +24,7 @@ user_host_re = re.compile('^# User@Host: (?P<user>\w+)\[[^\]]+\] @ (?P<host>[a-z
 stats_re = re.compile('^# Query_time: (?P<query_time>\d+) \s*Lock_time: (?P<lock_time>\d+) \s*Rows_sent: (?P<sent>\d+) \s*Rows_examined: (?P<scanned>\d+)')
 content_re = re.compile('^[^#].*')
 
-# This is the class that sends log messages to the GELF server
-class Client:
-    def __init__(self):
-        self.graylog2_server = config.get('default', 'gelfServer')
-        self.graylog2_port = config.getint('default', 'gelfPort')
-        self.maxChunkSize = config.getint('default', 'gelfMaxChunkSize')
 
-    def log(self, message):
-        UDPSock = socket(AF_INET,SOCK_DGRAM)
-        zmessage = zlib.compress(message)
-        UDPSock.sendto(zmessage,(self.graylog2_server,self.graylog2_port))
-        UDPSock.close()
 
 # This class is used to collapse multi-line log files into a single line. You 
 # will want to populate regEx with something useful!
@@ -171,7 +160,7 @@ if __name__ == '__main__':
     # Instantiate our actual GELF agent here. Note that as we are using UDP
     # there is no need to ever close any connections here. We can just exit
     # the script later without any grace or civility.
-    client = Client()
+    client = Client(config)
 
     # Create our queuing object, which is only used to signal threads
     # to shut down. This object may be expanded for more things later on though,
