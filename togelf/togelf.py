@@ -19,14 +19,6 @@ from stat import ST_SIZE
 from client import Client
 from optparse import OptionParser
 
-configFile = '/etc/gelfDaemon.conf'
-
-user_host_re = re.compile('^# User@Host: (?P<user>\w+)\[[^\]]+\] @ (?P<host>[a-zA-Z0-9.-]+)? \[(?P<ip>[0-9.]+)]');
-stats_re = re.compile('^# Query_time: (?P<query_time>\d+) \s*Lock_time: (?P<lock_time>\d+) \s*Rows_sent: (?P<sent>\d+) \s*Rows_examined: (?P<scanned>\d+)')
-content_re = re.compile('^[^#].*')
-
-
-
 # This class is used to collapse multi-line log files into a single line. You 
 # will want to populate regEx with something useful!
 class Concatenate:
@@ -59,6 +51,8 @@ class LogThread(threading.Thread):
         self.regEx = config.get(self.section, 'regex')
         self.facility = config.get(self.section, 'facility')
         self.shortMessageRegEx = config.get(self.section, 'short_message_regex')
+        self.logparser = config.get(self.section, 'parser')
+
         try:
             self.concatenateOn = config.get(self.section, 'concatenate_on')
         except ConfigParser.NoOptionError:
@@ -78,7 +72,7 @@ class LogThread(threading.Thread):
         truncation"""
         self.handle.close()
         self.handle = open(self.logPath, 'r')
-        self. position = self.handle.tell()
+        self.position = self.handle.tell()
        
     def run(self):
         # The the paths and whatnot from the config file
@@ -93,10 +87,14 @@ class LogThread(threading.Thread):
             sys.stderr.write('%s: unknown error occurred, thread exiting\n' %
                             sys.argv[0])
             sys.exit()
+
+        # Import the parser in a manner most disgusting...
+        module = __import__('parsers.' + self.logparser, globals(), locals(), [self.logparser], -1)
+        logparser = module.Parser(client, self.logPath, self.logLevel)
         
         # Instantiate the Concatenation class
         cat = Concatenate()
-        message = {}
+
         # Now for the thread's main loop
         while True:
             # We break if the queue is a non-zero size. This is pretty
@@ -115,36 +113,8 @@ class LogThread(threading.Thread):
             else:
                 # Now ditch any blank lines, because they're dumbass
                 if line != '':
-                    uh = st = ct = False
-                    # Check whether the log line matches our configured regex
-                    uh = user_host_re.match(line)
-                    st = stats_re.match(line)
-                    ct = content_re.match(line)
+                    logparser.parse_line(line)
 
-                    if uh:
-                        if message:
-                            message['short_message'] = message['full_message'][:60]
-                            client.log(json.dumps(message))
-                            message = {}
-                        
-                        message['version'] = '1.0'
-                        message['facility'] = self.facility
-                        message['file'] = self.logPath
-                        message['level'] = self.logLevel
-                        message['host'] = os.getenv('HOSTNAME')
-                        message['_user'] = uh.group('user')
-                        message['_client_host'] = uh.group('host')
-                        message['_client_ip'] = uh.group('ip')
-                    elif st:
-                        message['_query_time'] = st.group('query_time')
-                        message['_lock_time'] = st.group('lock_time')
-                        message['_rows_sent'] = st.group('sent')
-                        message['_rows_examined'] = st.group('scanned')
-                    elif ct:
-                        if message.has_key('full_message'):
-                            message['full_message'] += line
-                        else:
-                            message['full_message'] = line
 
 
 if __name__ == '__main__':
