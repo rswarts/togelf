@@ -17,6 +17,7 @@ import zlib
 from os import stat
 from stat import ST_SIZE
 from client import Client
+from optparse import OptionParser
 
 configFile = '/etc/gelfDaemon.conf'
 
@@ -147,10 +148,20 @@ class LogThread(threading.Thread):
 
 
 if __name__ == '__main__':
+    # Check the configuration
+    parser = OptionParser()
+    parser.add_option("-f", "--file", 
+        dest="config_file", 
+        help="Read configuration from FILE", 
+        default="/etc/togelf.conf", 
+        metavar="FILE")
+    
+    (options, args) = parser.parse_args()
+
     # We use a typical RFC 822 (called an .ini file) format
     config = ConfigParser.ConfigParser()
     try:
-        config.read(configFile)
+        config.read(options.config_file)
     except:
         # obviously no config means we're bailing immediately
         traceback.print_exc()
